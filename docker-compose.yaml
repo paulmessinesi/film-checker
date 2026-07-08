@@ -10,11 +10,6 @@ services:
       - SERVICE_FQDN_FILM_CHECKER=films.alaloupe.fr
     volumes:
       - film-checker-data:/data
-    labels:
-      - "traefik.http.routers.film-checker.rule=Host(`films.alaloupe.fr`)"
-      - "traefik.http.routers.film-checker.tls=true"
-      - "traefik.http.routers.film-checker.tls.certresolver=letsencrypt"
-      - "traefik.http.services.film-checker.loadbalancer.server.port=8000"
     restart: unless-stopped
 
 volumes:
