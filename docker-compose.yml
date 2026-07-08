@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  film-checker:
+    image: python:3.13-slim
+    ports:
+      - "8000"
+    environment:
+      - DB_PATH=/data/films.db
+    volumes:
+      - film-checker-data:/data
+    command: >
+      sh -c "
+      apt-get update -qq && apt-get install -y -qq curl > /dev/null 2>&1 &&
+      curl -sL http://host.docker.internal:9999/main.py -o /app/main.py &&
+      pip install -q fastapi uvicorn aiosqlite jinja2 &&
+      cd /app &&
+      uvicorn main:app --host 0.0.0.0 --port 8000
+      "
+
+volumes:
+  film-checker-data:
