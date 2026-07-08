@@ -465,37 +465,39 @@ function showToast(msg, icon) {
     t.className = 'toast';
     t.innerHTML = '<span class="toast-icon">' + (icon || '') + '</span><span class="toast-msg">' + msg + '</span>';
     c.appendChild(t);
-    setTimeout(function(){ t.classList.add('out'); setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 280); }, 2500);
+    setTimeout(function(){ t.classList.add('out'); setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 280); }, 2200);
 }
 
-// ── Event delegation: whole-row click toggles watched state ──
+// ── Single click handler: row or checkbox toggles state ──
 document.querySelector('tbody').addEventListener('click', function(e) {
     var row = e.target.closest('.film-row');
     if (!row) return;
-    var wrap = row.querySelector('.check-wrap');
-    if (!wrap) return;
-    var inp = wrap.querySelector('input');
-    if (e.target === inp) return; // let native click on checkbox handle it (will fire change event)
-    // click anywhere on row = toggle
-    toggleRow(row);
-});
-
-// Also handle the checkbox change event (for keyboard/accessibility)
-document.querySelector('tbody').addEventListener('change', function(e) {
-    if (e.target.type === 'checkbox' && e.target.closest('.film-row')) {
-        toggleRow(e.target.closest('.film-row'));
-    }
+    // Don't toggle twice if user clicks something inside a link/button
+    if (e.target.closest('a,button')) return;
+    toggleRow(row, e);
 });
 
 // ── Toggle watched state for a row ──
-async function toggleRow(row) {
+let toggling = false;
+async function toggleRow(row, event) {
+    // Guard against double-trigger from label+input events
+    if (toggling) return;
+    toggling = true;
+    setTimeout(function(){ toggling = false; }, 300);
+
     var wrap = row.querySelector('.check-wrap');
     var inp = wrap.querySelector('input');
     var mark = wrap.querySelector('.check-mark');
-    var wasChecked = inp.checked;
-    var v = wasChecked ? 0 : 1;
+    // Read desired state from the INPUT (which the browser already toggled if label was clicked)
+    // If we clicked the checkbox directly, browser toggled it. If we clicked the row, it didn't.
+    var newChecked = !inp.checked;
+    var eventTarget = event ? event.target : null;
+    // If the click was directly on the checkbox input, the browser already flipped it
+    var alreadyFlipped = (eventTarget === inp);
+    var v = alreadyFlipped ? (inp.checked ? 1 : 0) : (newChecked ? 1 : 0);
+
     var a = parseInt(row.dataset.annee);
-    var t = row.dataset.type;
+    var ft = row.dataset.type;
     var s = parseInt(row.dataset.subIdx);
     var p = row.dataset.person;
     var title = row.querySelector('.main').textContent;
@@ -503,31 +505,32 @@ async function toggleRow(row) {
         var r = await fetch('/vote', {
             method: 'POST',
             headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: new URLSearchParams({annee: a, film_type: t, sub_idx: s, personne: p, vu: v})
+            body: new URLSearchParams({annee: a, film_type: ft, sub_idx: s, personne: p, vu: v})
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
     } catch(e) {
         console.error(e);
         showToast('Erreur lors de la mise à jour', '⚠️');
+        toggling = false;
         return;
     }
-    // Update UI
+    // Set UI to match server state
     inp.checked = v === 1;
     wrap.classList.toggle('checked', v === 1);
     mark.style.display = v ? 'inline' : 'none';
     row.dataset.vu = v;
-    // Visual feedback: flash the row
+    // Flash animation
     row.classList.remove('flash');
     void row.offsetWidth;
     row.classList.add('flash');
     // Update stats
     updateStats();
-    // Toast notification
-    var typeLabel = t === 'oscar' ? 'Oscar' : 'Palme';
+    // Toast
+    var typeLabel = ft === 'oscar' ? 'Oscar' : 'Palme';
     if (v) {
-        showToast(typeLabel + ' ' + a + ' — ' + title + ' ✓', '✅');
+        showToast(typeLabel + ' ' + a + ' ✓', '✅');
     } else {
-        showToast(typeLabel + ' ' + a + ' — ' + title + ' marqué comme pas vu', '✗');
+        showToast(typeLabel + ' ' + a + ' — ' + title.slice(0, 40) + '… pas vu', '✗');
     }
 }
 
