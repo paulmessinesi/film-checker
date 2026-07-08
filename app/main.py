@@ -10,6 +10,7 @@ DB_PATH = Path(os.getenv("DB_PATH", "/data/films.db"))
 
 # ── SQL ────────────────────────────────────────────────────────────────
 def db():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(DB_PATH)
     c.row_factory = sqlite3.Row
     c.execute("""
