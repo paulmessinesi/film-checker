@@ -361,6 +361,9 @@ thead th:hover{color:var(--text)}
 thead th .sort-dir{display:inline-block;margin-left:3px;font-size:.65rem;opacity:.5}
 tbody tr{border-bottom:1px solid var(--border);transition:background .15s}
 tbody tr:hover{background:rgba(255,255,255,.03)}
+tbody tr{cursor:pointer}
+@keyframes rowFlash{0%{background:rgba(255,255,255,.12)}100%{background:transparent}}
+.film-row.flash{animation:rowFlash .45s ease}
 tbody tr td{padding:.4rem .35rem;vertical-align:middle}
 td.year{font-weight:600;width:45px;text-align:center;white-space:nowrap}
 .badge{display:inline-block;font-size:.6rem;font-weight:700;padding:.15rem .4rem;border-radius:4px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
@@ -435,7 +438,7 @@ footer a{color:var(--accent-oscar);text-decoration:none}
 <th title="Vu ?">Vu</th>
 </tr></thead><tbody>
 {% for f in films %}
-<tr class="film-row" data-type="{{ f.type }}" data-vu="{{ '1' if f.vu else '0' }}" data-annee="{{ f.annee }}" data-title="{{ f.titre|lower }}" data-director="{{ f.realisateur|lower }}" data-synopsis="{{ f.synopsis|lower }}" data-country="{{ f.pays|lower }}">
+<tr class="film-row" data-type="{{ f.type }}" data-vu="{{ '1' if f.vu else '0' }}" data-annee="{{ f.annee }}" data-person="{{ person }}" data-sub-idx="{{ f.sub_idx }}" data-title="{{ f.titre|lower }}" data-director="{{ f.realisateur|lower }}" data-synopsis="{{ f.synopsis|lower }}" data-country="{{ f.pays|lower }}">
 <td class="year">{{ f.annee }}</td>
 <td><span class="badge {{ f.type }}">{{ 'Oscar' if f.type == 'oscar' else 'Palme' }}</span></td>
 <td class="title"><span class="main">{{ f.titre }}</span></td>
@@ -443,7 +446,7 @@ footer a{color:var(--accent-oscar);text-decoration:none}
 <td class="synopsis"><span class="trunc">{% if f.synopsis %}{{ f.synopsis }}{% else %}<span style="color:var(--muted);font-size:.7rem">—</span>{% endif %}</span></td>
 <td class="country">{% if f.pays %}{{ f.pays }}{% else %}<span style="color:var(--muted);font-size:.7rem">—</span>{% endif %}</td>
 <td class="notes-cell">{% if f.type == 'palme' and not f.notes %}{% if f.annee == 1950 %}Pas de festival{% elif f.annee == 1968 %}Annule (Mai 68){% elif f.annee == 2020 %}Annule (Covid){% else %}—{% endif %}{% else %}{{ f.notes if f.notes else '—' }}{% endif %}</td>
-<td class="check"><label class="check-wrap{{ ' checked' if f.vu else '' }} {{ person }}" onclick="toggle({{ f.annee }},'{{ f.type }}',{{ f.sub_idx }},'{{ person }}',this)"><input type="checkbox"{{ ' checked' if f.vu else '' }}>{% if f.vu %}&#10003;{% endif %}</label></td>
+<td class="check"><span class="check-wrap{{ ' checked' if f.vu else '' }} {{ person }}"><input type="checkbox"{{ ' checked' if f.vu else '' }}><span class="check-mark"{% if not f.vu %}style="display:none"{% endif %}>&#10003;</span></span></td>
 </tr>
 {% endfor %}
 </tbody></table></div>
@@ -460,16 +463,42 @@ function showToast(msg, icon) {
     var c = document.getElementById('toast-container');
     var t = document.createElement('div');
     t.className = 'toast';
-    t.innerHTML = '<span class="toast-icon">' + (icon || '&#10003;') + '</span><span class="toast-msg">' + msg + '</span>';
+    t.innerHTML = '<span class="toast-icon">' + (icon || '') + '</span><span class="toast-msg">' + msg + '</span>';
     c.appendChild(t);
-    setTimeout(function(){ t.classList.add('out'); setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 280); }, 2200);
+    setTimeout(function(){ t.classList.add('out'); setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 280); }, 2500);
 }
 
-// ── Toggle watched ──
-async function toggle(a, t, s, p, el) {
-    var inp = el.querySelector('input');
+// ── Event delegation: whole-row click toggles watched state ──
+document.querySelector('tbody').addEventListener('click', function(e) {
+    var row = e.target.closest('.film-row');
+    if (!row) return;
+    var wrap = row.querySelector('.check-wrap');
+    if (!wrap) return;
+    var inp = wrap.querySelector('input');
+    if (e.target === inp) return; // let native click on checkbox handle it (will fire change event)
+    // click anywhere on row = toggle
+    toggleRow(row);
+});
+
+// Also handle the checkbox change event (for keyboard/accessibility)
+document.querySelector('tbody').addEventListener('change', function(e) {
+    if (e.target.type === 'checkbox' && e.target.closest('.film-row')) {
+        toggleRow(e.target.closest('.film-row'));
+    }
+});
+
+// ── Toggle watched state for a row ──
+async function toggleRow(row) {
+    var wrap = row.querySelector('.check-wrap');
+    var inp = wrap.querySelector('input');
+    var mark = wrap.querySelector('.check-mark');
     var wasChecked = inp.checked;
     var v = wasChecked ? 0 : 1;
+    var a = parseInt(row.dataset.annee);
+    var t = row.dataset.type;
+    var s = parseInt(row.dataset.subIdx);
+    var p = row.dataset.person;
+    var title = row.querySelector('.main').textContent;
     try {
         var r = await fetch('/vote', {
             method: 'POST',
@@ -479,17 +508,27 @@ async function toggle(a, t, s, p, el) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
     } catch(e) {
         console.error(e);
-        showToast('Erreur lors de la mise a jour', '&#9888;');
+        showToast('Erreur lors de la mise à jour', '⚠️');
         return;
     }
+    // Update UI
     inp.checked = v === 1;
-    el.classList.toggle('checked', v === 1);
-    el.innerHTML = '<input type="checkbox"' + (inp.checked ? ' checked' : '') + '>' + (v ? '&#10003;' : '');
-    var row = el.closest('.film-row');
-    if (row) row.dataset.vu = v;
+    wrap.classList.toggle('checked', v === 1);
+    mark.style.display = v ? 'inline' : 'none';
+    row.dataset.vu = v;
+    // Visual feedback: flash the row
+    row.classList.remove('flash');
+    void row.offsetWidth;
+    row.classList.add('flash');
+    // Update stats
     updateStats();
+    // Toast notification
     var typeLabel = t === 'oscar' ? 'Oscar' : 'Palme';
-    showToast((v ? 'Vu : ' : 'Pas vu : ') + typeLabel + ' ' + a, v ? '&#10003;' : '&#10007;');
+    if (v) {
+        showToast(typeLabel + ' ' + a + ' — ' + title + ' ✓', '✅');
+    } else {
+        showToast(typeLabel + ' ' + a + ' — ' + title + ' marqué comme pas vu', '✗');
+    }
 }
 
 // ── Search ──
