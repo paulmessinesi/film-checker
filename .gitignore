@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 app/films.db
 *.db
+.deploy_key
+.deploy_key.pub
+check_token.py
+generate_compose.py
+upload_to_github.py
